@@ -25,119 +25,114 @@
 
 Como tenemos en el ejemplo de arriba.
 
+
 ### Paso 5
 
-Realizamos la instalación y la configuración de **Docker y Docker-compose** en la instancia de AWS.
-
-En el script creado para esta práctica podemos apreciar los siguientes pasos:
+**Modificar el archivo de `https.sh` de alguna de las prácticas anteriores para incluir el servicio de Certbot**
 
 ```
-  
-#!/bin/bash
+#------------------ INSTALACIÓN Certbot ---------------------#
 
-# Actualizamos lista de repositorios
-apt update 
+# Instala snapd y actualiza
+snap install core; snap refresh core
+
+# Eliminamos certbot-auto y cualquier paquete del sistema operativo Cerbot
+apt-get remove certbot
+
+# Instalamos Certbot
+snap install --classic certbot 
+
+# Ejecutamos el comando certbot
+ln -s /snap/bin/certbot /usr/bin/certbot
+
+# Automatizamos la renovación
+certbot --apache -m demo@demo.es --agree-tos -d restisancheziaw.ddns.net
+```
+
+
+
+## Código del script
+```
+#!/bin/bash
+set -x
+
+# Actualizamos la lista de paquetes
+apt update
 
 # Actualizamos los paquetes
 apt upgrade -y
 
-# Instalamos docker
+#------------------ INSTALACIÓN Certbot ---------------------#
 
-apt install docker -y
+# Instala snapd y actualiza
+snap install core; snap refresh core
 
-# Instalamos docker-compose
+# Eliminamos certbot-auto y cualquier paquete del sistema operativo Cerbot
+apt-get remove certbot
 
-apt install docker-compose -y
+# Instalamos Certbot
+snap install --classic certbot 
 
-```
-### Paso 6 
+# Ejecutamos el comando certbot
+ln -s /snap/bin/certbot /usr/bin/certbot
 
-**Modificar el archivo de `docker-compose.yml` de alguna de las prácticas anteriores para incluir el servicio de HTTPS-PORTAL**
+# Automatizamos la renovación
+certbot --apache -m demo@demo.es --agree-tos -d restisancheziaw.ddns.net
 
-```
-version: '3.4'
-services:
-    https-portal:
-      image: steveltn/https-portal:1 
-      ports:
-        - 80:80 
-        - 443:443
-      restart: always
-      environment:
-        DOMAINS: 'resti-docker.ddns.net -> http://prestashop:80'
-        STAGE: 'production'
-      networks:
-        - frontend-network
-```
+#------------------ INSTALACIÓN LAMP---------------------#
 
-### Pasos para no redirigir
+#Instalamos Apache2
+apt install apache2 -y
 
-1. Nos metemos a phpmyadmin
-2. Vamos a SQL e introducimos:
+# Instalamos el MySQL Server
+apt install mysql-server -y
 
-```
-UPDATE ps_configuration SET value = '1' WHERE name = 'PS_SSL_ENABLED';
-UPDATE ps_configuration SET value = '1' WHERE name = 'PS_SSL_ENABLED_EVERYWHERE';
-```
+# Instalamos los módulos de PHP
+apt install php libapache2-mod-php php-mysql -y
 
-## Código docker-compose
-```
-version: '3.4'
-services:
-    https-portal:
-      image: steveltn/https-portal:1 
-      ports:
-        - 80:80 
-        - 443:443
-      restart: always
-      environment:
-        DOMAINS: 'resti-docker.ddns.net -> http://prestashop:80'
-        STAGE: 'production'
-      networks:
-        - frontend-network
-    phpmyadmin:
-        image: phpmyadmin
-        environment:
-            - PMA_ARBITRARY=1
-        ports:
-            - 8080:80
-        networks:
-            - frontend-network
-            - backend-network
-        depends_on: 
-            - mysql
-        restart: always
-    mysql:
-        image: mysql:5.7
-        ports:
-            - 3306:3306
-        environment:
-            - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
-            - MYSQL_DATABASE=${MYSQL_DATABASE}
-            - MYSQL_USER=${MYSQL_USER}
-            - MYSQL_PASSWORD=${MYSQL_PASSWORD}
-        volumes:
-            - mysql_data:/var/lib/mysql
-        networks:
-            - backend-network
-        restart: always
-    prestashop:
-        image: prestashop/prestashop
-        environment:
-            - DB_SERVER=${DB_SERVER}
-        volumes:
-            - prestashop_data:/var/www/html
-        networks:
-            - frontend-network
-            - backend-network
-        restart: always
-        depends_on: 
-            - mysql
-networks:
-    frontend-network:
-    backend-network:
+#------------------ INSTALACIÓN WORDPRESS CON WP-CLI ---------------------#
 
-volumes:
-    mysql_data:
-    prestashop_data:
+#Descargamos el archivo wp-cli.phar
+curl -O https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar
+
+#Asignamos permisos de ejecución
+chmod +x wp-cli.phar
+
+#Movemos el archivo al directorio /usr/local/bin
+mv wp-cli.phar /usr/local/bin/wp
+
+#VARIABLES
+BD_NOMBRE=wpiaw
+BD_USUARIO=resti
+IP_FRONT=localhost
+BD_PASS=root
+
+#Nos situamos en el directorio donde vamos a realizar la instalación.
+cd /var/www/html
+
+#Descargamos el código fuente de Wordpress
+wp core download --locale=es_ES --allow-root
+
+
+# Configuración de base de datos
+
+mysql -u root <<< "DROP DATABASE IF EXISTS $BD_NOMBRE;"
+mysql -u root <<< "CREATE DATABASE $BD_NOMBRE;"
+mysql -u root <<< "DROP USER IF EXISTS $BD_USUARIO@$IP_FRONT;"
+mysql -u root <<< "CREATE USER $BD_USUARIO@$IP_FRONT IDENTIFIED BY '$BD_PASS';"
+mysql -u root <<< "GRANT ALL PRIVILEGES ON $BD_NOMBRE.* TO $BD_USUARIO@$IP_FRONT;"
+mysql -u root <<< "FLUSH PRIVILEGES;"
+
+#Creamos el archivo de configuración
+wp config create --dbname=$BD_NOMBRE --dbuser=$BD_USUARIO --dbpass=$BD_PASS --allow-root
+
+#Instalamos Wordpress
+wp core install --url=http://restisancheziaw.ddns.net --title="IAW" --admin_user=admin --admin_password=admin --admin_email=admin@admin.com --allow-root
+
+#Eliminamos el index.html 
+cd /var/www/html
+rm -rf index.html
+
+#Reiniciamos apache
+systemctl restart apache2.service
 ```
