@@ -19,6 +19,8 @@
 
 **Registrar un nombre de dominio** en algún proveedor de dominio gratuito. En mi caso en NO-IP
 
+![IP CON DNS](imgs/ip.png)
+
 ### Pasos para no redirigir
 
 1. Nos metemos a phpmyadmin
